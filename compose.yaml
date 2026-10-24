@@ -1,0 +1,40 @@
+services:
+  workspace:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+      args:
+        USER_UID: ${USER_UID:?USER_UID is required}
+        USER_GID: ${USER_GID:?USER_GID is required}
+    user: vscode
+    init: true
+    working_dir: /workspace
+    command: sleep infinity
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      # 開発対象のソースコード
+      - type: bind
+        source: ${PROJECT_DIR:?PROJECT_DIR is required}
+        target: /workspace
+      # 個人設定の Git リポジトリ（接続先に関係なく共通）
+      - type: bind
+        source: ${PERSONAL_DIR:?PERSONAL_DIR is required}
+        target: /opt/claude-personal
+        # 編集をホスト側に限定したい場合は有効化
+        # read_only: true
+      # .env を起動のたびに読み込むため、workbench ディレクトリを RO マウント
+      # ファイル単独のマウントにせず、エディタの atomic save にも追随させる
+      - type: bind
+        source: .
+        target: /opt/claude-workbench
+        read_only: true
+      # 共有する認証・会話履歴・Claude Code 状態
+      - claude-state:/home/vscode/.claude
+      # Bedrock 利用時の AWS CLI 設定・SSO キャッシュ
+      - aws-state:/home/vscode/.aws
+
+volumes:
+  claude-state:
+  aws-state:

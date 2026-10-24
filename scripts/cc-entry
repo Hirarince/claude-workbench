@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# .env の CC_PROVIDER が唯一の接続先切替ポイント。
+# 設定ファイルはホストの workbench から読み取り専用でマウントされる。
+config_file=/opt/claude-workbench/.env
+if [[ ! -f "$config_file" ]]; then
+  echo "Missing workbench configuration: $config_file" >&2
+  exit 1
+fi
+
+# 自身が管理する信頼済みの .env のみを source します。
+# 秘密情報や第三者の入力を記載しないでください。
+# shellcheck disable=SC1090
+source "$config_file"
+
+provider="${CC_PROVIDER:-subscription}"
+model="${CC_MODEL:-sonnet}"
+config_dir="$HOME/.claude"
+personal_dir=/opt/claude-personal
+mkdir -p "$config_dir"
+
+# Skills・Agents・Rules・ユーザー設定は接続先に関係なく共通。
+# 既存の実ファイルは安全のため勝手に上書きしません。
+link_shared() {
+  local name="$1" target="$2" dest="$config_dir/$1"
+  [[ -e "$target" ]] || { echo "Missing personal config: $target" >&2; exit 1; }
+  if [[ -L "$dest" ]]; then
+    [[ "$(readlink "$dest")" == "$target" ]] || {
+      echo "Unexpected symlink at $dest (check manually)" >&2; exit 1;
+    }
+  elif [[ -e "$dest" ]]; then
+    echo "Existing file at $dest (back it up, then retry)" >&2
+    exit 1
+  else
+    ln -s "$target" "$dest"
+  fi
+}
+
+for item in CLAUDE.md skills agents rules; do
+  link_shared "$item" "$personal_dir/$item"
+done
+link_shared settings.json "$personal_dir/settings.json"
+
+export CLAUDE_CONFIG_DIR="$config_dir"
+
+# サブスク誤課金や別プロバイダーへの意図しない接続を避ける。
+unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL
+unset CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX
+unset CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE
+
+# 分岐はプロバイダー選択のここだけ。設定・履歴・Skills は共通。
+case "$provider" in
+  subscription|sub)
+    unset AWS_PROFILE AWS_REGION
+    ;;
+  bedrock)
+    export CLAUDE_CODE_USE_BEDROCK=1
+    export AWS_PROFILE="${AWS_PROFILE:-bedrock}"
+    export AWS_REGION="${AWS_REGION:-ap-northeast-1}"
+    ;;
+  *)
+    echo "Invalid CC_PROVIDER='$provider' (subscription or bedrock)" >&2
+    exit 2
+    ;;
+esac
+
+# --model が明示された場合は引数を優先し、それ以外は .env の既定値。
+# コンテナ内で直接 claude を実行せず、cc-entry を利用してください。
+for argument in "$@"; do
+  case "$argument" in
+    --model|--model=*) exec claude "$@" ;;
+  esac
+done
+exec claude --model "$model" "$@"

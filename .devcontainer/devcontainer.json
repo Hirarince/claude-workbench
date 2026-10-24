@@ -1,0 +1,13 @@
+{
+  "name": "Claude Workbench (Ubuntu SSH)",
+  "dockerComposeFile": "../compose.yaml",
+  "service": "workspace",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "vscode",
+  "overrideCommand": false,
+  "shutdownAction": "none",
+  "remoteEnv": {
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
+  },
+  "updateRemoteUserUID": false
+}
