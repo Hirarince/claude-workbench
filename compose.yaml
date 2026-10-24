@@ -34,6 +34,8 @@ services:
       - claude-state:/home/vscode/.claude
       # Bedrock 利用時の AWS CLI 設定・SSO キャッシュ
       - aws-state:/home/vscode/.aws
+    environment:
+      TZ: ${TZ:-Asia/Tokyo}
 
 volumes:
   claude-state:
